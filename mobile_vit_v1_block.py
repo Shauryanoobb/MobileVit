@@ -181,10 +181,9 @@ class MobileViT_v1_Block(Layer):
         shape = kops.shape(x)
         batch_size, orig_h, orig_w, D = shape[0], shape[1], shape[2], shape[3]
         
-        # orig_h, orig_w, D = x.shape[1], x.shape[2], x.shape[3]       
-
-        h_ceil = tf.math.ceil(orig_h / self.patch_size_h)
-        w_ceil = tf.math.ceil(orig_w / self.patch_size_w)
+        # Use TensorFlow operations for ceil to handle symbolic tensors
+        h_ceil = tf.cast(tf.math.ceil(tf.cast(orig_h, tf.float32) / self.patch_size_h), tf.int32)
+        w_ceil = tf.cast(tf.math.ceil(tf.cast(orig_w, tf.float32) / self.patch_size_w), tf.int32)
 
         new_h = h_ceil * self.patch_size_h
         new_w = w_ceil * self.patch_size_w
