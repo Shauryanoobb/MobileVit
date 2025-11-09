@@ -1,4 +1,5 @@
-import keras.ops as kops  # type: ignore
+import tensorflow as tf
+kops = tf
 from keras.layers import Layer, Dropout, Dense, Softmax  # type: ignore
 
 

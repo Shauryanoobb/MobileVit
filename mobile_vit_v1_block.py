@@ -1,5 +1,6 @@
 import keras #this is what youll install via pip
-import keras.ops as kops  # type: ignore
+import tensorflow as tf
+kops = tf #lets hope this works
 from keras.layers import Layer, Dropout, Dense, LayerNormalization, Concatenate  # type: ignore
 
 from .base_layers import ConvLayer
