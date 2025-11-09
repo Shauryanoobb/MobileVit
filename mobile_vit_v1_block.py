@@ -1,6 +1,5 @@
 import keras #this is what youll install via pip
 import tensorflow as tf
-kops = tf #lets hope this works
 from keras.layers import Layer, Dropout, Dense, LayerNormalization, Concatenate  # type: ignore
 
 from .base_layers import ConvLayer
@@ -177,49 +176,58 @@ class MobileViT_v1_Block(Layer):
         ]                            ]
         """
 
-        # Initially convert channel-last to channel-first for processing
-        shape = kops.shape(x)
+        # Get shape from input tensor using TensorFlow operations
+        shape = tf.shape(x)
         batch_size, orig_h, orig_w, D = shape[0], shape[1], shape[2], shape[3]
         
-        # Use TensorFlow operations for ceil to handle symbolic tensors
-        h_ceil = tf.cast(tf.math.ceil(tf.cast(orig_h, tf.float32) / self.patch_size_h), tf.int32)
-        w_ceil = tf.cast(tf.math.ceil(tf.cast(orig_w, tf.float32) / self.patch_size_w), tf.int32)
+        # Convert to float32 for division, use TF operations for symbolic tensors
+        orig_h_float = tf.cast(orig_h, tf.float32)
+        orig_w_float = tf.cast(orig_w, tf.float32)
+        
+        # Calculate ceiling and convert back to int32
+        h_ceil = tf.cast(tf.math.ceil(orig_h_float / float(self.patch_size_h)), tf.int32)
+        w_ceil = tf.cast(tf.math.ceil(orig_w_float / float(self.patch_size_w)), tf.int32)
 
         new_h = h_ceil * self.patch_size_h
         new_w = w_ceil * self.patch_size_w
 
-        # Condition to decide if resizing is necessary
-        resize_required = (new_h != orig_h) or (new_w != orig_w)
-
-        if resize_required:
-            x = kops.image.resize(x, (new_h, new_w))
-            num_patches_h = new_h // self.patch_size_h
-            num_patches_w = new_w // self.patch_size_w
-        else:
-            num_patches_h = orig_h // self.patch_size_h
-            num_patches_w = orig_w // self.patch_size_w
+        # Resize if necessary (using tf.cond for symbolic tensor conditions)
+        def resize_fn():
+            resized = tf.image.resize(x, (new_h, new_w))
+            return resized, new_h // self.patch_size_h, new_w // self.patch_size_w
+        
+        def no_resize_fn():
+            return x, orig_h // self.patch_size_h, orig_w // self.patch_size_w
+        
+        # Check if resize is needed
+        resize_needed = tf.logical_or(tf.not_equal(new_h, orig_h), tf.not_equal(new_w, orig_w))
+        x, num_patches_h, num_patches_w = tf.cond(
+            resize_needed,
+            resize_fn,
+            no_resize_fn
+        )
 
         num_patches = num_patches_h * num_patches_w
 
         # [B, H, W, D] --> [B*nh, ph, nw, pw*D]
-        reshaped_fm = kops.reshape(x, (batch_size * num_patches_h, self.patch_size_h, num_patches_w, self.patch_size_w * D))
+        reshaped_fm = tf.reshape(x, (batch_size * num_patches_h, self.patch_size_h, num_patches_w, self.patch_size_w * D))
 
         # [B * n_h, p_h, n_w, p_w*D] --> [B * n_h, n_w, p_h, p_w * D]
-        transposed_fm = kops.transpose(reshaped_fm, axes=[0, 2, 1, 3])
+        transposed_fm = tf.transpose(reshaped_fm, perm=[0, 2, 1, 3])
 
         # [B * n_h, n_w, p_h, p_w * D] --> [B, N, P, D] where P = p_h * p_w and N = n_h * n_w
-        reshaped_fm = kops.reshape(transposed_fm, (batch_size, num_patches, self.patch_area, D))
+        reshaped_fm = tf.reshape(transposed_fm, (batch_size, num_patches, self.patch_area, D))
 
         # [B, N, P, D] --> [B, P, N, D]
-        transposed_fm = kops.transpose(reshaped_fm, axes=[0, 2, 1, 3])
+        transposed_fm = tf.transpose(reshaped_fm, perm=[0, 2, 1, 3])
 
         # [B, P, N, D] -> [BP, N, D]
-        patches = kops.reshape(transposed_fm, [batch_size * self.patch_area, num_patches, D])
+        patches = tf.reshape(transposed_fm, [batch_size * self.patch_area, num_patches, D])
 
         info_dict = {
             "batch_size": batch_size,
             "orig_size": (orig_h, orig_w),
-            "resize": resize_required,
+            "resize": resize_needed,
             "num_patches_h": num_patches_h,
             "num_patches_w": num_patches_w,
             "total_patches": num_patches,
@@ -236,8 +244,8 @@ class MobileViT_v1_Block(Layer):
             D/d = embedding_dim
         """
 
-        # Get shape parameters for further processing
-        shape = kops.shape(x)
+        # Get shape parameters for further processing using TensorFlow
+        shape = tf.shape(x)
         D = shape[2]
         batch_size = info_dict["batch_size"]
         num_patches = info_dict["total_patches"]
@@ -246,22 +254,27 @@ class MobileViT_v1_Block(Layer):
         resize_required = info_dict["resize"]
 
         # Reshape to [BP, N, D] -> [B, P, N, D]
-        x = kops.reshape(x, [batch_size, self.patch_area, num_patches, D])
+        x = tf.reshape(x, [batch_size, self.patch_area, num_patches, D])
 
         # [B, P, N D] --> [B, N, P, D]
-        x = kops.transpose(x, (0, 2, 1, 3))
+        x = tf.transpose(x, perm=(0, 2, 1, 3))
 
         # [B, N, P, D] --> [B *n_h, n_w, p_h, p_w * D]
-        x = kops.reshape(x, (batch_size * num_patch_h, num_patch_w, self.patch_size_h, self.patch_size_w * D))
+        x = tf.reshape(x, (batch_size * num_patch_h, num_patch_w, self.patch_size_h, self.patch_size_w * D))
 
         # [B *n_h, n_w, p_h, p_w * D] --> [B * n_h, p_h, n_w, p_w * D]
-        x = kops.transpose(x, (0, 2, 1, 3))
+        x = tf.transpose(x, perm=(0, 2, 1, 3))
 
         # [B * n_h, p_h, n_w, p_w * D] --> [B, n_h * p_h, n_w, p_w, D] --> [B, H, W, C]
-        x = kops.reshape(x, (batch_size, num_patch_h * self.patch_size_h, num_patch_w * self.patch_size_w, D))
+        x = tf.reshape(x, (batch_size, num_patch_h * self.patch_size_h, num_patch_w * self.patch_size_w, D))
 
-        if resize_required:
-            x = kops.image.resize(x, info_dict["orig_size"])
+        # Resize back if needed using TensorFlow operations
+        orig_h, orig_w = info_dict["orig_size"]
+        x = tf.cond(
+            resize_required,
+            lambda: tf.image.resize(x, (orig_h, orig_w)),
+            lambda: x
+        )
 
         return x
 
