@@ -1,10 +1,10 @@
 from typing import Union
 
-#i think if we have keras 2.14 it should work
-import keras.ops as kops  # type: ignore
+#i think if we have keras 2.14 it should
 from keras.layers import Layer, Conv2D, BatchNormalization, Activation, DepthwiseConv2D, Identity, ZeroPadding2D  # type: ignore
 
 from .utils import make_divisible
+
 
 class ConvLayer(Layer):
     def __init__(
