@@ -5,7 +5,6 @@ from keras.layers import Layer, Dropout, Dense, LayerNormalization, Concatenate 
 
 from .base_layers import ConvLayer
 from .multihead_self_attention_2D import MultiHeadSelfAttention as MHSA
-from math import ceil
 
 
 class Transformer(Layer):
@@ -184,8 +183,8 @@ class MobileViT_v1_Block(Layer):
         
         # orig_h, orig_w, D = x.shape[1], x.shape[2], x.shape[3]       
 
-        h_ceil = ceil(orig_h / self.patch_size_h)
-        w_ceil = ceil(orig_w / self.patch_size_w)
+        h_ceil = tf.math.ceil(orig_h / self.patch_size_h)
+        w_ceil = tf.math.ceil(orig_w / self.patch_size_w)
 
         new_h = h_ceil * self.patch_size_h
         new_w = w_ceil * self.patch_size_w
